@@ -1,0 +1,142 @@
+/*
+  # Create BINGO Game Tables
+
+  1. New Tables
+    - `games`
+      - `id` (uuid, primary key) - Unique game identifier
+      - `created_at` (timestamptz) - When the game was created
+      - `status` (text) - Game status: 'waiting', 'playing', 'finished'
+      - `host_id` (text) - Identifier for the game host
+      - `winner_id` (uuid, nullable) - Reference to winning player
+      
+    - `players`
+      - `id` (uuid, primary key) - Unique player identifier
+      - `game_id` (uuid, foreign key) - Reference to game
+      - `player_name` (text) - Player's display name
+      - `created_at` (timestamptz) - When player joined
+      - `has_bingo` (boolean) - Whether player has achieved BINGO
+      
+    - `boards`
+      - `id` (uuid, primary key) - Unique board identifier
+      - `player_id` (uuid, foreign key) - Reference to player
+      - `board_data` (jsonb) - 5x5 grid of numbers
+      - `marked_cells` (jsonb) - Array of marked cell positions
+      
+    - `called_numbers`
+      - `id` (uuid, primary key) - Unique identifier
+      - `game_id` (uuid, foreign key) - Reference to game
+      - `number` (int) - The called number (1-75)
+      - `called_at` (timestamptz) - When the number was called
+
+  2. Security
+    - Enable RLS on all tables
+    - Add policies for authenticated and public access (BINGO is typically public)
+*/
+
+-- Create games table
+CREATE TABLE IF NOT EXISTS games (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at timestamptz DEFAULT now(),
+  status text DEFAULT 'waiting',
+  host_id text NOT NULL,
+  winner_id uuid,
+  CHECK (status IN ('waiting', 'playing', 'finished'))
+);
+
+-- Create players table
+CREATE TABLE IF NOT EXISTS players (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  game_id uuid REFERENCES games(id) ON DELETE CASCADE NOT NULL,
+  player_name text NOT NULL,
+  created_at timestamptz DEFAULT now(),
+  has_bingo boolean DEFAULT false
+);
+
+-- Create boards table
+CREATE TABLE IF NOT EXISTS boards (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  player_id uuid REFERENCES players(id) ON DELETE CASCADE NOT NULL UNIQUE,
+  board_data jsonb NOT NULL,
+  marked_cells jsonb DEFAULT '[]'::jsonb
+);
+
+-- Create called_numbers table
+CREATE TABLE IF NOT EXISTS called_numbers (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  game_id uuid REFERENCES games(id) ON DELETE CASCADE NOT NULL,
+  number int NOT NULL CHECK (number >= 1 AND number <= 75),
+  called_at timestamptz DEFAULT now()
+);
+
+-- Create indexes for better query performance
+CREATE INDEX IF NOT EXISTS idx_players_game_id ON players(game_id);
+CREATE INDEX IF NOT EXISTS idx_boards_player_id ON boards(player_id);
+CREATE INDEX IF NOT EXISTS idx_called_numbers_game_id ON called_numbers(game_id);
+
+-- Enable RLS
+ALTER TABLE games ENABLE ROW LEVEL SECURITY;
+ALTER TABLE players ENABLE ROW LEVEL SECURITY;
+ALTER TABLE boards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE called_numbers ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies for games table
+CREATE POLICY "Anyone can view games"
+  ON games FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY "Anyone can create games"
+  ON games FOR INSERT
+  TO public
+  WITH CHECK (true);
+
+CREATE POLICY "Host can update their games"
+  ON games FOR UPDATE
+  TO public
+  USING (true)
+  WITH CHECK (true);
+
+-- RLS Policies for players table
+CREATE POLICY "Anyone can view players"
+  ON players FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY "Anyone can join as player"
+  ON players FOR INSERT
+  TO public
+  WITH CHECK (true);
+
+CREATE POLICY "Players can update their status"
+  ON players FOR UPDATE
+  TO public
+  USING (true)
+  WITH CHECK (true);
+
+-- RLS Policies for boards table
+CREATE POLICY "Anyone can view boards"
+  ON boards FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY "Anyone can create boards"
+  ON boards FOR INSERT
+  TO public
+  WITH CHECK (true);
+
+CREATE POLICY "Players can update their boards"
+  ON boards FOR UPDATE
+  TO public
+  USING (true)
+  WITH CHECK (true);
+
+-- RLS Policies for called_numbers table
+CREATE POLICY "Anyone can view called numbers"
+  ON called_numbers FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY "Anyone can add called numbers"
+  ON called_numbers FOR INSERT
+  TO public
+  WITH CHECK (true);
